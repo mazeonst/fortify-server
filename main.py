@@ -128,7 +128,6 @@ async def login_user(seed_data: SeedRequest):
     finally:
         db.close()
 
-
 @app.get("/get_passwords")
 async def get_passwords(seed: str):
     seed_hash = hash_seed(seed)
@@ -148,23 +147,15 @@ async def get_passwords(seed: str):
         # Расшифровываем пароли перед отправкой
         decrypted_passwords = []
         for pwd in passwords:
-            try:
-                encrypted_password_bytes = bytes.fromhex(pwd.password_value)
-                print(f"Зашифрованный пароль (hex): {pwd.password_value}")  # Вывод зашифрованных данных
-
-                decrypted_password_value = decrypt_data(encrypted_password_bytes, generate_key_from_seed(seed))
-                print(f"Расшифрованный пароль: {decrypted_password_value}")  # Вывод расшифрованного пароля
-
-                decrypted_passwords.append({
-                    "password_name": pwd.password_name,
-                    "password_value": decrypted_password_value,
-                    "service": pwd.service,
-                    "email": pwd.email,
-                    "username": pwd.username
-                })
-            except ValueError as e:
-                print(f"Ошибка при расшифровке пароля {pwd.password_name}: {str(e)}")
-                continue
+            encrypted_password_bytes = bytes.fromhex(pwd.password_value)
+            decrypted_password_value = decrypt_data(encrypted_password_bytes, generate_key_from_seed(seed))
+            decrypted_passwords.append({
+                "password_name": pwd.password_name,
+                "password_value": decrypted_password_value,
+                "service": pwd.service,
+                "email": pwd.email,
+                "username": pwd.username
+            })
 
         return {"passwords": decrypted_passwords}
     finally:
