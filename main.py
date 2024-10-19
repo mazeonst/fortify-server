@@ -128,36 +128,41 @@ async def login_user(seed_data: SeedRequest):
     finally:
         db.close()
 
-@app.get("/get_passwords")
-async def get_passwords(seed: str):
+@app.post("/save_password")
+async def save_password(seed: str = Body(...), password_data: PasswordData = Body(...)):
     seed_hash = hash_seed(seed)
-    print(f"Хэш для сид-фразы {seed}: {seed_hash}")  # Вывод хэша для проверки
     db = SessionLocal()
     try:
         # Проверяем, существует ли пользователь
         user = db.query(User).filter(User.seed_hash == seed_hash).first()
         if not user:
-            print("Пользователь не найден для сид-хэша:", seed_hash)  # Логирование
             raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-        # Получаем все пароли пользователя
-        passwords = db.query(Password).filter(Password.seed_hash == seed_hash).all()
-        print(f"Найдено паролей: {len(passwords)}")  # Выводим количество найденных паролей
+        # Генерация ключа шифрования из seed-фразы
+        encryption_key = generate_key_from_seed(seed)
 
-        # Расшифровываем пароли перед отправкой
-        decrypted_passwords = []
-        for pwd in passwords:
-            encrypted_password_bytes = bytes.fromhex(pwd.password_value)
-            decrypted_password_value = decrypt_data(encrypted_password_bytes, generate_key_from_seed(seed))
-            decrypted_passwords.append({
-                "password_name": pwd.password_name,
-                "password_value": decrypted_password_value,
-                "service": pwd.service,
-                "email": pwd.email,
-                "username": pwd.username
-            })
+        # Шифрование данных пароля
+        encrypted_password = encrypt_data(password_data.password_value, encryption_key)
 
-        return {"passwords": decrypted_passwords}
+        # Преобразуем зашифрованные данные в hex строку перед сохранением
+        encrypted_password_hex = encrypted_password.hex()
+
+        # Получаем количество уже сохраненных паролей для данного пользователя
+        password_count = db.query(Password).filter(Password.seed_hash == seed_hash).count()
+        password_name = f"Password_{password_count + 1}"  # Присваиваем новый порядковый номер
+
+        # Сохраняем новый пароль с порядковым именем
+        new_password = Password(
+            seed_hash=seed_hash,
+            password_name=password_name,
+            password_value=encrypted_password_hex,  # Сохраняем как hex-строку
+            service=password_data.service,
+            email=password_data.email,
+            username=password_data.username
+        )
+        db.add(new_password)  # Добавляем новый пароль в базу данных
+        db.commit()  # Сохраняем изменения
+        return {"message": "Пароль сохранен", "password_name": password_name}
     finally:
         db.close()
 
