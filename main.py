@@ -23,6 +23,14 @@ class User(Base):
     seed_hash = Column(String, primary_key=True, index=True)
     passwords = relationship("Password", back_populates="user")
 
+# Обновляем модель данных для обновления пароля
+class UpdatePasswordData(BaseModel):
+    password_name: str
+    new_password_value: str
+    service: str
+    email: str
+    username: str
+
 # Определяем модель пароля
 class Password(Base):
     __tablename__ = "passwords"
@@ -162,6 +170,7 @@ async def save_password(seed: str = Body(...), password_data: PasswordData = Bod
         )
         db.add(new_password)  # Добавляем новый пароль в базу данных
         db.commit()  # Сохраняем изменения
+        print("Сохраненные данные:", new_password)  # Лог сохраненных данных
         return {"message": "Пароль сохранен", "password_name": password_name}
     finally:
         db.close()
@@ -185,21 +194,22 @@ async def get_passwords(seed: str):
 
         # Расшифровываем пароли перед отправкой
         decrypted_passwords = []
-        for pwd in passwords:
+        for password in passwords:
             try:
                 # Преобразуем из hex в байты для расшифровки
-                encrypted_password_bytes = bytes.fromhex(pwd.password_value)
+                encrypted_password_bytes = bytes.fromhex(password.password_value)
                 decrypted_password_value = decrypt_data(encrypted_password_bytes, encryption_key)
+                print("Полученные данные из БД:", password.username)  # Лог получения username
                 decrypted_passwords.append({
-                    "password_name": pwd.password_name,
+                    "password_name": password.password_name,
                     "password_value": decrypted_password_value,
-                    "service": pwd.service,
-                    "email": pwd.email,
-                    "username": pwd.username
+                    "service": password.service,
+                    "email": password.email,
+                    "username": password.username
                 })
             except ValueError as e:
                 # Логгируем или игнорируем пароли с некорректными данными
-                print(f"Ошибка при расшифровке пароля {pwd.password_name}: {str(e)}")
+                print(f"Ошибка при расшифровке пароля {password.password_name}: {str(e)}")
                 continue
 
         return {"passwords": decrypted_passwords}
@@ -225,5 +235,41 @@ async def delete_password(seed: str = Body(...), password_name: str = Body(...))
         db.delete(password)
         db.commit()
         return {"message": "Пароль успешно удален"}
+    finally:
+        db.close()
+
+@app.post("/update_password")
+async def update_password(seed: str = Body(...), password_data: UpdatePasswordData = Body(...)):
+    seed_hash = hash_seed(seed)
+    db = SessionLocal()
+    try:
+        # Проверяем, существует ли пользователь
+        user = db.query(User).filter(User.seed_hash == seed_hash).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+        # Получаем пароль для обновления
+        password = db.query(Password).filter(
+            Password.seed_hash == seed_hash, Password.password_name == password_data.password_name
+        ).first()
+
+        if not password:
+            raise HTTPException(status_code=404, detail="Пароль не найден")
+
+        # Генерация ключа шифрования из seed-фразы
+        encryption_key = generate_key_from_seed(seed)
+
+        # Шифрование нового пароля
+        encrypted_password = encrypt_data(password_data.new_password_value, encryption_key)
+        encrypted_password_hex = encrypted_password.hex()
+
+        # Обновляем данные пароля
+        password.password_value = encrypted_password_hex
+        password.service = password_data.service
+        password.email = password_data.email
+        password.username = password_data.username
+        db.commit()
+
+        return {"message": "Пароль успешно обновлен"}
     finally:
         db.close()
