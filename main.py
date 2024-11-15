@@ -273,3 +273,28 @@ async def update_password(seed: str = Body(...), password_data: UpdatePasswordDa
         return {"message": "Пароль успешно обновлен"}
     finally:
         db.close()
+
+@app.get("/export_passwords")
+async def export_passwords(seed: str):
+    seed_hash = hash_seed(seed)
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.seed_hash == seed_hash).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        encryption_key = generate_key_from_seed(seed)
+        passwords = db.query(Password).filter(Password.seed_hash == seed_hash).all()
+
+        decrypted_passwords = []
+        for password in passwords:
+            try:
+                encrypted_password_bytes = bytes.fromhex(password.password_value)
+                decrypted_password_value = decrypt_data(encrypted_password_bytes, encryption_key)
+                decrypted_passwords.append(f"Service: {password.service}\nUsername: {password.username}\nEmail: {password.email}\nPassword: {decrypted_password_value}\n")
+            except ValueError as e:
+                continue
+
+        return {"passwords": "\n\n".join(decrypted_passwords)}
+    finally:
+        db.close()
