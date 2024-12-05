@@ -54,8 +54,15 @@ def hash_seed(seed: str) -> str:
     return hashlib.sha256(seed.encode()).hexdigest()
 
 # Функция для генерации случайной сид-фразы
-def generate_seed(length: int = 16) -> str:
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+# Для изменения количества символов достаточно заменить цифру
+def generate_seed(word_count: int = 12) -> str:
+    # Чтение слов из файла
+    with open("english_words.txt", "r") as file:
+        words = [word.strip() for word in file.read().split(',')]  # Убираем лишние пробелы
+    # Выбор случайных слов
+    seed_words = random.sample(words, word_count)
+    # Возвращаем строку из выбранных слов
+    return ' '.join(seed_words)
 
 # Функция для генерации ключа шифрования из seed-фразы
 def generate_key_from_seed(seed: str) -> bytes:
@@ -169,7 +176,7 @@ async def save_password(seed: str = Body(...), password_data: PasswordData = Bod
             username=password_data.username
         )
         db.add(new_password)  # Добавляем новый пароль в базу данных
-        db.commit()  # Сохраняем изменения
+        db.commit()
         print("Сохраненные данные:", new_password)  # Лог сохраненных данных
         return {"message": "Пароль сохранен", "password_name": password_name}
     finally:
