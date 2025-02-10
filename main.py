@@ -241,6 +241,17 @@ async def delete_password(seed: str = Body(...), password_name: str = Body(...))
         # Удаляем пароль из базы данных
         db.delete(password)
         db.commit()
+
+        # После удаления – переименовываем оставшиеся пароли по порядку
+        all_passwords = db.query(Password) \
+            .filter(Password.seed_hash == seed_hash) \
+            .order_by(Password.id.asc()) \
+            .all()
+
+        for index, p in enumerate(all_passwords, start=1):
+            p.password_name = f"Password_{index}"
+        db.commit()
+
         return {"message": "Пароль успешно удален"}
     finally:
         db.close()
