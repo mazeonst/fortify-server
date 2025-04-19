@@ -58,7 +58,7 @@ def generate_key_from_seed(seed: str) -> bytes:
     return seed_hash[:32]
 
 def encrypt_data(data: str, key: bytes) -> bytes:
-    iv = os.urandom(16)  # Инициализационный вектор (IV)
+    iv = os.urandom(16)  # Инициализационный вектор
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
     encryptor = cipher.encryptor()
 
